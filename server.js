@@ -99,13 +99,15 @@ connectToDatabase()
         app.get('/api/examsPres/:id', async (req, res) => {
             try {
                 const studentId = req.params.id;
-                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p 
-                                                  JOIN examen e ON p.examen_id_examen = e.id_examen
+                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p
+                                                                           JOIN examen e ON p.examen_id_examen = e.id_examen
+                                                                           JOIN docente d on e.docente_id_docente = d.id_docente
                                                   WHERE p.presentado = 'S' AND p.estudiante_id_estudiante = :id`, [studentId]);
 
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
                 const columns = result.metaData.map(col => col.name);
 
+                console.log(result)
                 const presentacion = result.rows.map(row => {
                     let rowObj = {};
                     columns.forEach((col, index) => {
