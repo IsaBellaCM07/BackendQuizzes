@@ -48,6 +48,22 @@ connectToDatabase()
             }
         });
 
+        // Obtener todos los docentes
+        app.get('/api/docentes', async (req, res) => {
+            try {
+                const resultEst = await connection.execute('SELECT * FROM DOCENTE');
+                const docentes = resultEst.rows.map(row => ({
+                    ID_DOCENTE: row[0],
+                    NOMBRE: row[1],
+                    APELLIDO: row[2],
+                }));
+                res.json(docentes);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener datos' });
+            }
+        });
+
         // Obtener un estudiante específico por ID
         app.get('/api/estudiantes/:id', async (req, res) => {
             try {
@@ -73,7 +89,9 @@ connectToDatabase()
         app.get('/api/examsDis/:id', async (req, res) => {
             try {
                 const studentId = req.params.id;
-                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p JOIN examen e ON p.examen_id_examen = e.id_examen
+                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p
+                                                                           JOIN examen e ON p.examen_id_examen = e.id_examen
+                                                                           JOIN docente d on e.docente_id_docente = d.id_docente
                                                          WHERE p.presentado = 'N' AND p.estudiante_id_estudiante = :id`, [studentId]);
 
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
@@ -86,7 +104,6 @@ connectToDatabase()
                     });
                     return rowObj;
                 });
-                console.log(presentacion)
                 res.json(presentacion);
             } catch (error) {
                 console.error('Error al ejecutar la consulta:', error);
@@ -107,7 +124,6 @@ connectToDatabase()
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
                 const columns = result.metaData.map(col => col.name);
 
-                console.log(result)
                 const presentacion = result.rows.map(row => {
                     let rowObj = {};
                     columns.forEach((col, index) => {
@@ -145,6 +161,53 @@ connectToDatabase()
             } catch (error) {
                 console.error('Error al ejecutar la consulta:', error);
                 res.status(500).json({ error: 'Error al obtener datos' });
+            }
+        });
+
+// Obtener todas las preguntas asociadas a un examen específico
+        app.get('/api/preguntas-examen/:id', async (req, res) => {
+            try {
+                const examenId = req.params.id;
+                const result = await connection.execute(`SELECT DISTINCT 
+                            p.id_pregunta,
+                            p.descripcion AS pregunta_descripcion,
+                            p.porcentaje,
+                            p.tema_titulo,
+                            p.tipo_id_tipo_pregunta,
+                            t.tipo_pregunta,
+                            r.id_respuesta_pregunta,
+                            r.descripcion AS respuesta_descripcion,
+                            r.es_correcta
+                        FROM 
+                            examen e
+                        JOIN 
+                            preguntas_total_examen pte ON e.id_examen = pte.examen_id_examen
+                        JOIN 
+                            pregunta_banco pb ON pte.banco_preguntas_id_banco = pb.banco_preguntas_id_banco
+                        JOIN 
+                            pregunta p ON pb.pregunta_id_pregunta = p.id_pregunta
+                        JOIN 
+                            respuesta_pregunta r ON p.id_pregunta = r.pregunta_id_pregunta
+                        JOIN 
+                            tipo t ON p.tipo_id_tipo_pregunta = t.id_tipo_pregunta
+                        WHERE 
+                            e.id_examen = :examenId`, [ examenId ]);
+
+                // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
+                const columns = result.metaData.map(col => col.name);
+
+                const preguntas = result.rows.map(row => {
+                    let rowObj = {};
+                    columns.forEach((col, index) => {
+                        rowObj[col] = row[index];
+                    });
+                    return rowObj;
+                });
+
+                res.json(preguntas);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener datos de las preguntas del examen' });
             }
         });
 
