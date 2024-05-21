@@ -211,6 +211,52 @@ connectToDatabase()
             }
         });
 
+
+        // Obtener todos los cursos
+        app.get('/api/cursos', async (req, res) => {
+            try {
+                const result = await connection.execute('SELECT * FROM curso');
+                const cursos = result.rows.map(row => ({
+                    id_curso: row[0],
+                    nombre: row[1],
+                    unidades: row[2],
+                    contenido: row[3],
+                }));
+                res.json(cursos);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener datos de los cursos' });
+            }
+        });
+
+        // Obtener los cursos de un estudiante específico
+        app.get('/api/cursos-estudiante/:idEstudiante', async (req, res) => {
+            try {
+                const studentId = req.params.idEstudiante;
+                const result = await connection.execute(`SELECT DISTINCT c.*, g.nombre as nombre_grupo, d.nombre AS nombre_docente
+                                                         FROM curso c
+                                                                  JOIN grupo g ON c.id_curso = g.curso_id_curso
+                                                                  JOIN profe_grupo pg ON g.id_grupo = pg.grupo_id_grupo
+                                                                  JOIN docente d ON pg.docente_id_docente = d.id_docente
+                                                                  JOIN estudiante_grupo eg ON g.id_grupo = eg.grupo_id_grupo
+                                                        WHERE eg.estudiante_id_estudiante = :idEstudiante`, [studentId]);
+                const cursos = result.rows.map(row => ({
+                    id_curso: row[0],
+                    nombre: row[1],
+                    unidades: row[2],
+                    contenido: row[3],
+                    nombre_grupo: row[4],
+                    nombre_docente: row[5],
+                }));
+
+                res.json(cursos);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener los cursos del estudiante' });
+            }
+        });
+
+
         // Inicia el servidor Express
         app.listen(port, () => {
             console.log(`Servidor Express iniciado en http://localhost:${port}`);
