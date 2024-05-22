@@ -177,7 +177,8 @@ connectToDatabase()
                             t.tipo_pregunta,
                             r.id_respuesta_pregunta,
                             r.descripcion AS respuesta_descripcion,
-                            r.es_correcta
+                            r.es_correcta, 
+                            e.tiempo
                         FROM 
                             examen e
                         JOIN 
