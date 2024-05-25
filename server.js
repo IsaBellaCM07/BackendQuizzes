@@ -85,6 +85,28 @@ connectToDatabase()
             }
         });
 
+
+        // Obtener un docente específico por ID
+        app.get('/api/docentes/:id', async (req, res) => {
+            try {
+                const teacherId = req.params.id;
+                const result = await connection.execute('SELECT * FROM Docente WHERE id_docente = :id', [teacherId]);
+                if (result.rows.length === 0) {
+                    res.status(404).json({ error: 'Docente no encontrado' });
+                    return;
+                }
+                const teacher = {
+                    ID_DOCENTE: result.rows[0][0],
+                    NOMBRE: result.rows[0][1],
+                    APELLIDO: result.rows[0][2],
+                };
+                res.json(teacher);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener datos' });
+            }
+        });
+
         // Obtener exámenes disponibles para un estudiante específico
         app.get('/api/examsDis/:id', async (req, res) => {
             try {
@@ -254,6 +276,104 @@ connectToDatabase()
             } catch (error) {
                 console.error('Error al ejecutar la consulta:', error);
                 res.status(500).json({ error: 'Error al obtener los cursos del estudiante' });
+            }
+        });
+
+        // Obtener los cursos de un docente específico
+        app.get('/api/cursos-docente/:idDocente', async (req, res) => {
+            try {
+                const teacherId = req.params.idDocente;
+                const result = await connection.execute(`SELECT c.id_curso, c.nombre, c.unidades, c.contenido, g.nombre AS nombre_grupo, COUNT(eg.estudiante_id_estudiante) AS numero_estudiantes
+                                                         FROM curso c
+                                                                  JOIN grupo g ON c.id_curso = g.curso_id_curso
+                                                                  JOIN profe_grupo pg ON g.id_grupo = pg.grupo_id_grupo
+                                                                  JOIN docente d ON pg.docente_id_docente = d.id_docente
+                                                                  LEFT JOIN estudiante_grupo eg ON g.id_grupo = eg.grupo_id_grupo
+                                                         WHERE d.id_docente = :teacherId
+                                                         GROUP BY c.id_curso, c.nombre, c.unidades, c.contenido, g.nombre`, [teacherId]);
+                const cursos = result.rows.map(row => ({
+                    id_curso: row[0],
+                    nombre: row[1],
+                    unidades: row[2],
+                    contenido: row[3],
+                    nombre_grupo: row[4],
+                    numero_estudiantes: row[5],
+                }));
+
+                res.json(cursos);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener los cursos del estudiante' });
+            }
+        });
+
+// Obtener los examenes creados de un curso, por un docente específico
+        app.get('/api/examenes-creados/:teacherId/:cursoId', async (req, res) => {
+            try {
+                const teacherId = req.params.teacherId;
+                const cursoId = req.params.cursoId;
+
+                const query = `
+            SELECT e.*,
+                   d.nombre AS docente_nombre,
+                   d.apellido AS docente_apellido,
+                   g.nombre AS grupo_nombre
+            FROM examen e
+            JOIN docente d ON e.docente_id_docente = d.id_docente
+            JOIN grupo g ON g.id_grupo = (SELECT gp.grupo_id_grupo 
+                                          FROM profe_grupo gp 
+                                          WHERE gp.docente_id_docente = d.id_docente
+                                          AND gp.grupo_id_grupo = g.id_grupo)
+            WHERE d.id_docente = :teacherId
+            AND g.curso_id_curso = :cursoId
+        `;
+                const result = await connection.execute(query, [teacherId, cursoId]);
+
+                // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
+                const columns = result.metaData.map(col => col.name);
+
+                const examenes = result.rows.map(row => {
+                    let rowObj = {};
+                    columns.forEach((col, index) => {
+                        rowObj[col] = row[index];
+                    });
+                    return rowObj;
+                });
+
+                res.json(examenes);
+            } catch (error) {
+                console.error('Error al ejecutar la consulta:', error);
+                res.status(500).json({ error: 'Error al obtener datos de los examenes' });
+            }
+        });
+
+// Obtener los estudiantes de un curso, con un docente específico
+        app.get('/api/estudiantes-curso/:teacherId/:cursoId', async (req, res) => {
+            try {
+                const { teacherId, cursoId } = req.params;
+                const result = await connection.execute(
+                    `SELECT e.id_estudiante AS id, e.nombre, e.apellido
+             FROM estudiante e
+             JOIN estudiante_grupo eg ON e.id_estudiante = eg.estudiante_id_estudiante
+             JOIN grupo g ON eg.grupo_id_grupo = g.id_grupo
+             JOIN profe_grupo pg ON g.id_grupo = pg.grupo_id_grupo
+             WHERE pg.docente_id_docente = :teacherId AND g.curso_id_curso = :cursoId`,
+                    [teacherId, cursoId]
+                );
+
+                const columns = result.metaData.map(col => col.name);
+                const students = result.rows.map(row => {
+                    let rowObj = {};
+                    columns.forEach((col, index) => {
+                        rowObj[col.toLowerCase()] = row[index];
+                    });
+                    return rowObj;
+                });
+
+                res.json(students);
+            } catch (error) {
+                console.error('Error al obtener los estudiantes del curso:', error);
+                res.status(500).json({ error: 'Error al obtener datos de los estudiantes' });
             }
         });
 
