@@ -378,6 +378,29 @@ connectToDatabase()
         });
 
 
+        // Obtener todas las categorias
+        app.get('/api/temas', async (req, res) => {
+            try {
+                const result = await connection.execute(
+                    `SELECT * FROM TEMA`
+                );
+
+                const columns = result.metaData.map(col => col.name);
+                const themes = result.rows.map(row => {
+                    let rowObj = {};
+                    columns.forEach((col, index) => {
+                        rowObj[col.toLowerCase()] = row[index];
+                    });
+                    return rowObj;
+                });
+
+                res.json(themes);
+            } catch (error) {
+                console.error('Error al obtener los estudiantes del curso:', error);
+                res.status(500).json({ error: 'Error al obtener datos de los estudiantes' });
+            }
+        });
+
         // Inicia el servidor Express
         app.listen(port, () => {
             console.log(`Servidor Express iniciado en http://localhost:${port}`);
