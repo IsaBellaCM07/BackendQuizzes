@@ -5,12 +5,13 @@ const cors = require('cors');
 const app = express();
 const port = 3001;
 app.use(cors());
+app.use(express.json())
 
 // Configura la conexión a la base de datos Oracle
 const connectionConfig = {
-    user: 'PROYECTO',
-    password: '123',
-    connectString: '//localhost:1522/xepdb1'
+    user: 'ANRUMO03',
+    password: 'anrumo03',
+    connectString: '//localhost:1521/xepdb1'
 };
 
 // Variable global para la conexión
@@ -68,7 +69,7 @@ connectToDatabase()
         app.get('/api/estudiantes/:id', async (req, res) => {
             try {
                 const studentId = req.params.id;
-                const result = await connection.execute('SELECT * FROM Estudiante WHERE id_estudiante = :id', [studentId]);
+                const result = await connection.execute('SELECT id_estudiante, nombre, apellido FROM Estudiante WHERE id_estudiante = :id', [studentId]);
                 if (result.rows.length === 0) {
                     res.status(404).json({ error: 'Estudiante no encontrado' });
                     return;
@@ -111,10 +112,10 @@ connectToDatabase()
         app.get('/api/examsDis/:id', async (req, res) => {
             try {
                 const studentId = req.params.id;
-                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p
+                const result = await connection.execute(`SELECT * FROM presentacion_estudiante p
                                                                            JOIN examen e ON p.examen_id_examen = e.id_examen
                                                                            JOIN docente d on e.docente_id_docente = d.id_docente
-                                                         WHERE p.presentado = 'N' AND p.estudiante_id_estudiante = :id`, [studentId]);
+                                                         WHERE p.estado_presentacion = 'Pendiente' AND p.estudiante_id_estudiante = :id`, [studentId]);
 
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
                 const columns = result.metaData.map(col => col.name);
@@ -138,10 +139,10 @@ connectToDatabase()
         app.get('/api/examsPres/:id', async (req, res) => {
             try {
                 const studentId = req.params.id;
-                const result = await connection.execute(`SELECT * FROM presentacion_Estudiante p
+                const result = await connection.execute(`SELECT * FROM presentacion_estudiante p
                                                                            JOIN examen e ON p.examen_id_examen = e.id_examen
                                                                            JOIN docente d on e.docente_id_docente = d.id_docente
-                                                  WHERE p.presentado = 'S' AND p.estudiante_id_estudiante = :id`, [studentId]);
+                                                  WHERE p.estado_presentacion = 'Finalizado' AND p.estudiante_id_estudiante = :id`, [studentId]);
 
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
                 const columns = result.metaData.map(col => col.name);
@@ -187,34 +188,11 @@ connectToDatabase()
         });
 
 // Obtener todas las preguntas asociadas a un examen específico
-        app.get('/api/preguntas-examen/:id', async (req, res) => {
+        app.get('/api/preguntas-examen/:examenId/:presId', async (req, res) => {
             try {
-                const examenId = req.params.id;
-                const result = await connection.execute(`SELECT DISTINCT 
-                            p.id_pregunta,
-                            p.descripcion AS pregunta_descripcion,
-                            p.porcentaje,
-                            p.tema_titulo,
-                            p.tipo_id_tipo_pregunta,
-                            t.tipo_pregunta,
-                            r.id_respuesta_pregunta,
-                            r.descripcion AS respuesta_descripcion,
-                            r.es_correcta, 
-                            e.tiempo
-                        FROM 
-                            examen e
-                        JOIN 
-                            preguntas_total_examen pte ON e.id_examen = pte.examen_id_examen
-                        JOIN 
-                            pregunta_banco pb ON pte.banco_preguntas_id_banco = pb.banco_preguntas_id_banco
-                        JOIN 
-                            pregunta p ON pb.pregunta_id_pregunta = p.id_pregunta
-                        JOIN 
-                            respuesta_pregunta r ON p.id_pregunta = r.pregunta_id_pregunta
-                        JOIN 
-                            tipo t ON p.tipo_id_tipo_pregunta = t.id_tipo_pregunta
-                        WHERE 
-                            e.id_examen = :examenId`, [ examenId ]);
+                const examenId = req.params.examenId;
+                const presId = req.params.presId;
+                const result = await connection.execute(`EXEC escoger_preguntas_presentacion(:presId, :examenId)`, [ examenId ]);
 
                 // Asegúrate de que `result.metaData` está disponible y contiene los nombres de las columnas
                 const columns = result.metaData.map(col => col.name);
@@ -400,6 +378,34 @@ connectToDatabase()
                 res.status(500).json({ error: 'Error al obtener datos de los estudiantes' });
             }
         });
+
+        // Crear un examen
+        app.post('/api/examenes/crear', async (req, res) => {
+            try {
+                // Extraer los datos del cuerpo de la solicitud
+                //const { examName, description, fechaFinal, totalQuestions, aleatoryQ, fechaDisp, theme, teacherId} = req.body;
+                const newExam = req.body;
+
+                const id_examen = await connection.execute(`SELECT obtener_nuevo_id((SELECT id_examen
+                    FROM (SELECT id_examen FROM examen ORDER BY id_examen DESC) WHERE ROWNUM = 1)) as nuevo_id from dual`);
+                const query = 'INSERT INTO examen (id_examen, nombre, descripcion, tiempo, num_preguntas, num_preguntas_aleatorias, fecha_y_hora_disponible, tema_titulo, docente_id_docente) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                const values = [id_examen, newExam.nombre, newExam.descripcion, newExam.tiempo, newExam.num_preguntas, newExam.num_preguntas_aleatorias, newExam.fecha_y_hora_disponible, newExam.tema_titulo, newExam.docent_id_doncente];
+                // Ejecutar la consulta para insertar el examen en la base de datos
+                const result = await connection.execute(`INSERT INTO EXAMEN (id_examen, nombre, descripcion, tiempo, num_preguntas, num_preguntas_aleatorias, fecha_y_hora_disponible,
+    tema_titulo, docente_id_docente)
+  VALUES (:id_examen, :nombre, :descripcion, :tiempo, :num_preguntas, :num_preguntas_aleatorias, :fecha_y_hora_disponible, :tema_titulo, :docent_id_doncente)`,
+                    [id_examen, newExam.nombre, newExam.descripcion, newExam.tiempo, newExam.num_preguntas, newExam.num_preguntas_aleatorias, newExam.fecha_y_hora_disponible, newExam.tema_titulo, newExam.docent_id_doncente]);
+
+                // Devolver una respuesta de éxito
+                res.status(201).json({ message: 'Examen creado con éxito', examenId: result.lastRowid });
+            } catch (error) {
+                console.error('Error al crear el examen:', error);
+                res.status(500).json({ error: 'Error al crear el examen' });}
+        });
+
+
+
+
 
         // Inicia el servidor Express
         app.listen(port, () => {
